@@ -13,10 +13,21 @@ class HTMLReader {
         JSDOM.fromURL(url)
             .then(document => {
                 const markdown = processor.process_dom(url, document, res, inline_title, ignore_links);
-                res.send(markdown);
+                
+                if (res) {
+                    res.send(markdown);
+                } else {
+                    // Command-line output
+                    console.log(markdown);
+                }
             })
             .catch(() => {
-                res.status(400).send(failure_message);
+                if (res) {
+                    res.status(400).send(failure_message);
+                } else {
+                    // Command-line output for failure
+                    console.error(failure_message);
+                }
             });
     }
 }
@@ -33,9 +44,18 @@ class AppleReader {
                 try {
                     const json = JSON.parse(body);
                     const markdown = apple_dev_parser.parse_dev_doc_json(json, inline_title, ignore_links);
-                    res.send(markdown);
+
+                    if (res) {
+                        res.send(markdown);
+                    } else {
+                        console.log(markdown);
+                    }
                 } catch (error) {
-                    res.status(400).send(failure_message);
+                    if (res) {
+                        res.status(400).send(failure_message);
+                    } else {
+                        console.error(failure_message);
+                    }
                 }
             });
         });
@@ -49,26 +69,39 @@ class StackReader {
                 const markdown_q = processor.process_dom(url, document, res, inline_title, ignore_links, 'question');
                 const markdown_a = processor.process_dom(url, document, res, false, ignore_links, 'answers');
                 
-                if (markdown_a.startsWith('Your Answer')) {
-                    res.send(markdown_q);
+                if (res) {
+                    if (markdown_a.startsWith('Your Answer')) {
+                        res.send(markdown_q);
+                    } else {
+                        res.send(`${markdown_q}\n\n## Answer\n${markdown_a}`);
+                    }
                 } else {
-                    res.send(`${markdown_q}\n\n## Answer\n${markdown_a}`);
+                    // Command-line output
+                    if (markdown_a.startsWith('Your Answer')) {
+                        console.log(markdown_q);
+                    } else {
+                        console.log(`${markdown_q}\n\n## Answer\n${markdown_a}`);
+                    }
                 }
             })
             .catch(() => {
-                res.status(400).send(failure_message);
+                if (res) {
+                    res.status(400).send(failure_message);
+                } else {
+                    console.error(failure_message);
+                }
             });
     }
 }
 
 module.exports = {
-    HTMLReader,
-    StackReader,
-    AppleReader,
+    html_reader: HTMLReader,
+    stack_reader: StackReader,
+    apple_reader: AppleReader,
     reader_for_url: function (url) {
-        if (url.startsWith(apple_dev_prefix)) {
+        if (url.startsWith("https://developer.apple.com")) {
             return new AppleReader();
-        } else if (url.startsWith(stackoverflow_prefix)) {
+        } else if (url.startsWith("https://stackoverflow.com")) {
             return new StackReader();
         } else {
             return new HTMLReader();
