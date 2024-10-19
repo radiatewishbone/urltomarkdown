@@ -1,39 +1,38 @@
+// url_to_markdown_common_filters.js
+
 module.exports = {
 
 	list: [
 		{
 			domain: /.*/,
 			remove: [
-				/\[¶\]\(#[^\s]+\s+"[^"]+"\)/g
+				/\[¶\]\(#[^\s]+\s+"[^"]+"\)/g // Remove ¶ symbols with links
 			],
 			replace: [
 				{
 					find: /\[([^\]]*)\]\(\/\/([^\)]*)\)/g,
-				replacement: '[$1](https://$2)'
+					replacement: '[$1](https://$2)' // Convert protocol-relative URLs to absolute
 				}
 			]
 		},
 		{
 			domain: /.*\.wikipedia\.org/,
 			remove: [
-				/\*\*\[\^\]\(#cite_ref[^\)]+\)\*\*/g,
-				/(?:\\\[)?\[edit\]\([^\s]+\s+"[^"]+"\)(?:\\\])?/ig,
-				/\^\s\[Jump up to[^\)]*\)/ig,
-				/\[[^\]]*\]\(#cite_ref[^\)]+\)/g,
-				/\[\!\[Edit this at Wikidata\].*/g
+				/\*\*\[\^\]\(#cite_ref[^\)]+\)\*\*/g, // Remove citation links
+				/(?:\\\[)?\[edit\]\([^\s]+\s+"[^"]+"\)(?:\\\])?/ig, // Remove [edit] links
+				/\^\s\[Jump up to[^\)]*\)/ig, // Remove "Jump up to" links
+				/\[[^\]]*\]\(#cite_ref[^\)]+\)/g, // Remove inline citation links
+				/\[\!\[Edit this at Wikidata\].*/g // Remove "Edit this at Wikidata" links
 			],
 			replace: [
 				{
 					find: /\(https:\/\/upload.wikimedia.org\/wikipedia\/([^\/]+)\/thumb\/([^\)]+\..{3,4})\/[^\)]+\)/ig,
-					replacement: '(https://upload.wikimedia.org/wikipedia/$1/$2)'
+					replacement: '(https://upload.wikimedia.org/wikipedia/$1/$2)' // Fix Wikipedia image thumbnails
 				},
 				{
 					find: /\n(.+)\n\-{32,}\n/ig,
-					replacement: (match, title) => {
-						return '\n'+title+'\n'+'-'.repeat(title.length)+'\n'
-					}
+					replacement: (match, title) => `\n${title}\n${'-'.repeat(title.length)}\n` // Adjust title formatting
 				}
-
 			]
 		},
 		{
@@ -41,57 +40,53 @@ module.exports = {
 			replace: [
 				{
 					find: '(https://miro.medium.com/max/60/',
-					replacement: '(https://miro.medium.com/max/600/'
+					replacement: '(https://miro.medium.com/max/600/' // Replace small images with larger ones
 				},
 				{
 					find: /\s*\[\s*!\[([^\]]+)\]\(([^\)]+)\)\s*\]\(([^\?\)]*)\?[^\)]*\)\s*/g,
-					replacement: '\n![$1]($2)\n[$1]($3)\n\n'
+					replacement: '\n![$1]($2)\n[$1]($3)\n\n' // Format linked images correctly
 				}
 			]
 		},
 		{
 			domain: /(?:.*\.)?stackoverflow\.com/,
 			remove: [
-				/\* +Links(.|\r|\n)*Three +\|/g
+				/\* +Links(.|\r|\n)*Three +\|/g // Remove unnecessary "Links" sections
 			]
 		}
 	],
 
-	filter: function (url, data, ignore_links=false) {
-		let domain='';
-		let base_address='';
+	// Function to apply the appropriate filters based on the URL's domain
+	filter: function (url, data, ignore_links = false) {
+		let domain = '';
+		let base_address = '';
 		if (url) {
-			url = new URL(url);
-			if (url) {
-				base_address = url.protocol+"//"+url.hostname;
-				domain = url.hostname;
-			}
+			const parsed_url = new URL(url);
+			base_address = `${parsed_url.protocol}//${parsed_url.hostname}`;
+			domain = parsed_url.hostname;
 		}
 
-		for (let i=0;i<this.list.length;i++) {
-			if (domain.match(this.list[i].domain)) {
-				if (this.list[i].remove) {
-					for (let j=0;j<this.list[i].remove.length; j++) {
-						data = data.replaceAll(this.list[i].remove[j],"");
-					}
-				}
-				if (this.list[i].replace) {
-					for (let j=0;j<this.list[i].replace.length; j++) {
-						data = data.replaceAll(this.list[i].replace[j].find,
-							this.list[i].replace[j].replacement);
-					}
-				}
+		// Apply matching filters for the domain
+		this.list.forEach(filterConfig => {
+			if (domain.match(filterConfig.domain)) {
+				// Apply removals
+				filterConfig.remove?.forEach(pattern => {
+					data = data.replaceAll(pattern, "");
+				});
+
+				// Apply replacements
+				filterConfig.replace?.forEach(replacement => {
+					data = data.replaceAll(replacement.find, replacement.replacement);
+				});
 			}
-		}
+		});
 
-		// make relative URLs absolute
-		data = data.replaceAll(/\[([^\]]*)\]\(\/([^\/][^\)]*)\)/g,
- 			(match, title, address) => {
-				return "["+title+"]("+base_address+"/"+address+")";
-  			}
-		);
+		// Make relative URLs absolute
+		data = data.replaceAll(/\[([^\]]*)\]\(\/([^\/][^\)]*)\)/g, (match, title, address) => {
+			return `[${title}](${base_address}/${address})`;
+		});
 
-		// remove inline links and refs
+		// Optionally remove inline links and references
 		if (ignore_links) {
 			data = data.replaceAll(/\[\[?([^\]]+\]?)\]\([^\)]+\)/g, '$1');
 			data = data.replaceAll(/[\\\[]+([0-9]+)[\\\]]+/g, '[$1]');
@@ -99,5 +94,4 @@ module.exports = {
 
 		return data;
 	}
-
 }

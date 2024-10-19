@@ -73,7 +73,7 @@
             "application/x-www-form-urlencoded": {
               "schema": {
                 "type": "object",
-                "required": [ "html" ],
+                "required": ["html"],
                 "properties": {
                   "url": {
                     "type": "string",

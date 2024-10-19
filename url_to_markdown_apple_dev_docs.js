@@ -2,176 +2,138 @@ module.exports = {
 	
 	dev_references: [],
 
-
+	// Converts the developer URL to the corresponding JSON data URL
 	dev_doc_url: function (url) {
+		const queryless = url.split('?')[0].replace(/\/$/, ''); // Remove query params and trailing slash
+		const parts = queryless.split("/");
 
-		let query_parts = url.split('?');
-
-		let queryless = query_parts[0];
-
-		if (queryless.endsWith('/')) {
-		    queryless = queryless.slice(0, -1)
-		}
-
-		let parts = queryless.split("/");
-
-		let json_url = "https://developer.apple.com/tutorials/data";
-
-		for (let i=3; i<parts.length;i++) {
-		    json_url += "/" + parts[i];
-		}
-		json_url += ".json";
-
-		return json_url;
-
+		// Construct JSON URL for Apple Developer documentation
+		return parts.length > 3 
+			? `https://developer.apple.com/tutorials/data/${parts.slice(3).join("/")}.json`
+			: null;
 	},
 
+	// Main function to parse Apple Developer doc JSON
 	parse_dev_doc_json: function (json, inline_title = true, ignore_links = false) {
 		let text = "";
 
-		if (inline_title) {
-			if (typeof json.metadata !== 'undefined') {
-				if (typeof json.metadata.title !== 'undefined') {
-					text += "# "+json.metadata.title + "\n\n";
-				}
-			}
-		}
+		// Parse metadata title if available
+		text += this.parse_metadata(json, inline_title);
 
-		if (typeof json.references !== 'undefined') {
-			this.dev_references = json.references;
-		}	
-	    if (typeof json.primaryContentSections !== 'undefined') {
-    		text += this.process_sections(json.primaryContentSections, ignore_links);
-		} else if (typeof json.sections !== 'undefined') {
-    		text += this.process_sections(json.sections, ignore_links);
-		}
-	return text;
+		// Update references if present
+		if (json.references) this.dev_references = json.references;
+
+		// Process and parse sections
+		text += this.process_sections(json.primaryContentSections || json.sections || [], ignore_links);
+
+		return text;
 	},
 
+	// Parse the metadata title, if it exists
+	parse_metadata: function (json, inline_title) {
+		return (inline_title && json.metadata?.title) 
+			? `# ${json.metadata.title}\n\n`
+			: "";
+	},
+
+	// Process the document's sections, handling both content and declarations
 	process_sections: function (sections, ignore_links) {
 		let text = "";
 
-		sections.forEach((section, i) => {
+		sections.forEach(section => {
+			if (section.kind === 'declarations') {
+				text += this.process_declarations(section);
+			} else if (section.kind === 'content') {
+				text += this.process_content_section(section, ignore_links);
+			}
 
-	        if (typeof section.kind !== 'undefined') {
-	            if (section.kind == 'declarations') {
-	                if (typeof section.declarations !== 'undefined') {
-	                    section.declarations.forEach((declaration, i) => {
+			// Process section titles
+			if (section.title) {
+				text += section.kind === 'hero' 
+					? `# ${section.title}\n`
+					: `## ${section.title}`;
+			}
 
-	                        if (typeof declaration.tokens !== undefined) {
-	                            token_text = "";
-	                            declaration.tokens.forEach((token, i) => {                          
-	                                token_text += token.text;
-	                            });
-	                            text += token_text;
-	                        }
-
-	                        if (typeof declaration.languages !== undefined) {
-	                        	if (declaration.languages.length) {
-	                            	language_text = "\nLanguages: " + declaration.languages.join(', ');
-	                            	text += " "+language_text;
-	                        	}
-	                        }
-
-	                        if (typeof declaration.platforms !== undefined) {
-	                            if (declaration.platforms.length) {
-	                            	platform_text = "\nPlatforms: " + declaration.platforms.join(', ');
-	                            	text += " "+platform_text;
-	                        	}
-	                        }
-	                    });
-	                    text += "\n\n";
-	                }
-	            } else if (section.kind == 'content') {
-	            	text += this.process_content_section(section, ignore_links);
-	            }
-	        }
-
-	        if (typeof section.title !== 'undefined') {
-	            if (typeof section.kind !== 'undefined' && section.kind == 'hero') {
-	                text += "# " + section.title + "\n";
-	            } else {
-	                text += "## " + section.title;
-	            }
-	        }
-
-
-	        if (typeof section.content !== 'undefined') {
-	            section.content.forEach((sectionContent, i) => {
-	                if (typeof sectionContent.type !== 'undefined') {
-	                    if (sectionContent.type == 'text') {
-	                        text += sectionContent.text + "\n";
-	                    }
-	                }
-	            });
-	        }
-
-	    });
-
-	return text;
-	
+			// Add any additional text content in the section
+			if (section.content) {
+				section.content.forEach(content => {
+					if (content.type === 'text') {
+						text += `${content.text}\n`;
+					}
+				});
+			}
+		});
+		return text;
 	},
-	process_content_section(section, ignore_links) {
-		text = "";
-		section.content.forEach((content, i) => {
-			
-            if (typeof content.type != 'undefined') {
-                if (content.type == 'paragraph') {
-                    if (typeof content.inlineContent !== 'undefined') {
-                        inline_text = "";
-                        content.inlineContent.forEach((inline, i) => {                                  
-                            if (typeof inline.type !== 'undefined') {
-                                if (inline.type == "text") {
-                                    inline_text += inline.text;
-                                } else if (inline.type == "link") {
-                                	if (ignore_links) {
-                                		inline_text += inline.title;
-                                	} else {
- 	                                   inline_text += "["+inline.title+"]("+inline.destination+")";
-                                	}
-                                } else if (inline.type == "reference") {
-                                	if (typeof inline.identifier !== 'undefined') {
-	                                	if (typeof this.dev_references[inline.identifier] !== 'undefined') {
-				                			inline_text += this.dev_references[inline.identifier].title;
-				                		}
-			                		}
-                				} else if (inline.type == 'codeVoice') {
-	            					if (typeof inline.code !== 'undefined') {
-	            						inline_text += "`"+inline.code+"`";
-	            					}
-	            				}
-                            }                                   
-                        });
-                        text += inline_text + "\n\n";
-                    }
-                } else if (content.type == 'codeListing') {                         
-                    code_text = "\n```\n";
-                    code_text += content.code.join("\n");
-                    code_text += "\n```\n\n";
-                    text += code_text;
-                } else if (content.type == 'unorderedList') {
-                	if (typeof content.items !== 'undefined') {
-                		content.items.forEach((list_item, i) => {
-                			text += "* " + this.process_content_section(list_item, ignore_links);
-                		});
-                	}
-                } else if (content.type == 'orderedList') {
-                	if (typeof content.items !== 'undefined') {
-                		n=0;
-                		content.items.forEach((list_item, i) => {
-                			n = n + 1;
-                			text += n + ". " + this.process_content_section(list_item, ignore_links);
-                		});
-                	}
-                } else if (content.type == 'heading') {
-	            	if (typeof content.level !== 'undefined' && typeof content.text !== 'undefined') {
-	            		text += "#".repeat(content.level);
-	            		text += " " + content.text + "\n\n";
-	            	}
-	            }
-            }
-        });
 
-        return text;
+	// Process declarations within a section
+	process_declarations: function (section) {
+		let text = "";
+		if (section.declarations) {
+			section.declarations.forEach(declaration => {
+				const tokens = declaration.tokens?.map(token => token.text).join('') || "";
+				const languages = declaration.languages?.join(', ') || "";
+				const platforms = declaration.platforms?.join(', ') || "";
+
+				text += `${tokens} ${languages ? `\nLanguages: ${languages}` : ''} ${platforms ? `\nPlatforms: ${platforms}` : ''}\n\n`;
+			});
+		}
+		return text;
+	},
+
+	// Process content sections and parse inline content
+	process_content_section: function (section, ignore_links) {
+		let text = "";
+
+		section.content.forEach(content => {
+			switch (content.type) {
+				case 'paragraph':
+					text += this.process_paragraph(content, ignore_links);
+					break;
+				case 'codeListing':
+					text += this.process_code_listing(content);
+					break;
+				case 'unorderedList':
+					text += this.process_unordered_list(content, ignore_links);
+					break;
+				case 'orderedList':
+					text += this.process_ordered_list(content, ignore_links);
+					break;
+				case 'heading':
+					text += `${"#".repeat(content.level)} ${content.text}\n\n`;
+					break;
+			}
+		});
+
+		return text;
+	},
+
+	// Process a paragraph content
+	process_paragraph: function (content, ignore_links) {
+		return content.inlineContent?.map(inline => this.process_inline_content(inline, ignore_links)).join('') + "\n\n";
+	},
+
+	// Process code listings
+	process_code_listing: function (content) {
+		return `\n\`\`\`\n${content.code.join("\n")}\n\`\`\`\n\n`;
+	},
+
+	// Process unordered lists
+	process_unordered_list: function (content, ignore_links) {
+		return content.items?.map(item => `* ${this.process_content_section(item, ignore_links)}`).join('') || "";
+	},
+
+	// Process ordered lists
+	process_ordered_list: function (content, ignore_links) {
+		return content.items?.map((item, i) => `${i + 1}. ${this.process_content_section(item, ignore_links)}`).join('') || "";
+	},
+
+	// Process inline content types
+	process_inline_content: function (inline, ignore_links) {
+		if (inline.type === "text") return inline.text;
+		if (inline.type === "link") return ignore_links ? inline.title : `[${inline.title}](${inline.destination})`;
+		if (inline.type === "reference" && this.dev_references[inline.identifier]) return this.dev_references[inline.identifier].title;
+		if (inline.type === "codeVoice") return `\`${inline.code}\``;
+		return "";
 	}
 }

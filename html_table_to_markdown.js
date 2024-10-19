@@ -4,138 +4,95 @@ const justify = require('justify-text');
 module.exports = {
 	max_width: 96,
 
+	// Clean function to strip HTML tags and decode entities
 	clean: function (str) {
-		str = str.replace(/<\/?[^>]+(>|$)/g, "");
-		str = str.replace(/(\r\n|\n|\r)/gm, "");
-		str = htmlEntities.decode(str);
-		return str;
+		str = str.replace(/<\/?[^>]+(>|$)/g, "");  // Remove HTML tags
+		str = str.replace(/(\r\n|\n|\r)/gm, "");   // Remove line breaks
+		return htmlEntities.decode(str);           // Decode HTML entities
 	},
 
+	// Convert HTML table to markdown
 	convert: function (table) {
 		let result = "\n";
 
-		let caption = table.match(/<caption[^>]*>((?:.|\n)*)<\/caption>/i);
-		if (caption)
+		// Handle caption if present
+		const caption = table.match(/<caption[^>]*>((?:.|\n)*)<\/caption>/i);
+		if (caption) {
 			result += this.clean(caption[1]) + "\n\n";
+		}
 
-		let items = [];
+		const items = [];
+		const rows = table.match(/(<tr[^>]*>(?:.|\n)*?<\/tr>)/gi);
 
-		// collect data
-		let rows = table.match(/(<tr[^>]*>(?:.|\n)*?<\/tr>)/gi);
-		let n_rows = rows.length;
-		for (let r=0;r<n_rows;r++) {
-			let item_cols = [];
-			let cols = rows[r].match(/<t[h|d][^>]*>(?:.|\n)*?<\/t[h|d]>/gi);
-			for (let c=0;c<cols.length;c++)
-				item_cols.push(this.clean(cols[c]));
+		// If no rows are found, return an empty string
+		if (!rows || rows.length < 2) return "";
+
+		// Process rows and columns
+		const n_rows = rows.length;
+		for (let r = 0; r < n_rows; r++) {
+			const item_cols = [];
+			const cols = rows[r].match(/<t[h|d][^>]*>(?:.|\n)*?<\/t[h|d]>/gi) || [];
+			cols.forEach(col => item_cols.push(this.clean(col)));
 			items.push(item_cols);
 		}
 
-		// is this a proper table?
-		if (n_rows < 2)
-			return "";
+		// Determine the maximum number of columns
+		const n_cols = Math.max(...items.map(row => row.length));
 
-		// find number of columns
-		let n_cols=0;
-		for (let r=0;r<n_rows;r++) {
-			if (items[r].length > n_cols) {
-				n_cols = items[r].length;
-			}
-		}
+		// Normalise columns by padding with empty strings where necessary
+		items.forEach(row => {
+			while (row.length < n_cols) row.push("");
+		});
 
-		// normalise columns
-		for (let r=0;r<n_rows;r++) {
-			for (let c=0;c<n_cols;c++) {
-				if (typeof items[r][c] === 'undefined') {
-					items[r].push("");
+		// Calculate column widths
+		const column_widths = Array(n_cols).fill(3);
+		items.forEach(row => {
+			row.forEach((col, c) => {
+				const col_length = col.length;
+				if (col_length > column_widths[c]) {
+					column_widths[c] = col_length;
 				}
-			}
-		}
+			});
+		});
 
-		// correct widths
-		let column_widths = [];
-		for (let r=0;r<n_rows;r++) {
-			for (let c=0;c<n_cols;c++) {
-				column_widths.push(3);
-			}
-			for (let c=0;c<n_cols;c++) {
-				let l = items[r][c].length;
-				if (l>column_widths[c]) {
-					column_widths[c] = l;
-				}
-			}
-		}
+		// Calculate the total table width
+		const total_width = column_widths.reduce((sum, width) => sum + width, 0);
 
-		// decide how to present
-		let total_width = 0;
-		for (let c=0;c<n_cols;c++)
-			total_width = total_width + column_widths[c];
-
+		// If total width is within max_width, render as a table
 		if (total_width < this.max_width) {
-			// present as table
+			// Justify and pad cells
+			items.forEach(row => {
+				row.forEach((col, c) => {
+					row[c] = justify.ljust(col, column_widths[c], " ");
+				});
+			});
 
-			// pad cells
-			for (let r=0;r<n_rows;r++) {
-				for (let c=0;c<n_cols;c++) {
-					items[r][c] = justify.ljust(items[r][c], column_widths[c], " ");
-				}
-			}
-
-			if (n_rows >0 && n_cols > 0) {
+			// Build the table header and separator
+			if (n_rows > 0 && n_cols > 0) {
 				if (n_rows > 1) {
-					result += "|";
-					for (let c=0;c<n_cols;c++) {
-						result += items[0][c];
-						result += "|";
-					}
+					result += "|" + items[0].join("|") + "|\n";
 				}
-				result += "\n";
-				result += "|";
-				for (let c=0;c<n_cols;c++) {
-					result += "-".repeat(column_widths[c]) + "|";
-				}
-				result += "\n";
-				for (let r=1;r<n_rows;r++) {
-					result += "|";
-					for (let c=0;c<n_cols;c++) {
-						result += items[r][c];
-						result += "|";
-					}
-					result += "\n";
+				result += "|" + column_widths.map(width => "-".repeat(width)).join("|") + "|\n";
+
+				// Build table rows
+				for (let r = 1; r < n_rows; r++) {
+					result += "|" + items[r].join("|") + "|\n";
 				}
 			}
 		} else {
-
-			// present as indented list
-
-			result += "\n";
-			for (let r=1;r<n_rows;r++) {
-				if (items[0][0] || items[r][0])
-					result += "* ";
-				if (items[0][0]) {
-					result += items[0][0];
-					result += ": ";
+			// Render as an indented list if the table is too wide
+			for (let r = 1; r < n_rows; r++) {
+				if (items[0][0] || items[r][0]) {
+					result += "* " + (items[0][0] ? items[0][0] + ": " : "") + items[r][0] + "\n";
 				}
-				if (items[r][0])
-					result += items[r][0];
-				if (items[0][0] || items[r][0])
-					result += "\n";
-				for (let c=1;c<n_cols;c++) {
-					if (items[0][c] || items[r][c])
-						result += "  * ";
-					if (items[0][c]) {
-						result += items[0][c];
-						result += ": ";
+				for (let c = 1; c < n_cols; c++) {
+					if (items[0][c] || items[r][c]) {
+						result += "  * " + (items[0][c] ? items[0][c] + ": " : "") + items[r][c] + "\n";
 					}
-					if (items[r][c])
-						result += items[r][c];
-					if (items[0][c] || items[r][c])
-						result += "\n";
 				}
 			}
 		}
 
 		return result;
 	}
-
 }

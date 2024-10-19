@@ -1,89 +1,45 @@
 const readers = require('./url_to_markdown_readers.js');
 const processor = require('./url_to_markdown_processor.js');
 const validURL = require('@7c/validurl');
-const express = require('express');
-const rateLimit = require('express-rate-limit');
+const fs = require('fs');
+const path = require('path');
 const JSDOM = require('jsdom').JSDOM;
-const port = process.env.PORT;
-const app = express();
 
-const rateLimiter = rateLimit({
-	windowMs: 30 * 1000,
-	max: 5,
-	message: 'Rate limit exceeded',
-	headers: true
-});
+// Get URL from command-line arguments
+const url = process.argv[2];  // First argument passed to the script
+const outputDir = process.env.OUTPUT_DIR || './markdown-outputs';
+const inlineTitle = process.argv.includes('--title');  // Check if '--title' is passed
+const ignoreLinks = process.argv.includes('--no-links');  // Check if '--no-links' is passed
 
-app.use(rateLimiter);
-
-app.use(express.urlencoded({
-  extended: true,
-  limit: '10mb'
-}));
-
-function send_headers(res) {
-	res.header("Access-Control-Allow-Origin", '*');
-	res.header("Access-Control-Allow-Methods", 'GET, POST');
- 	res.header("Access-Control-Expose-Headers", 'X-Title');
- 	res.header("Content-Type", 'text/markdown');
+// Ensure URL is provided
+if (!url || !validURL(url)) {
+    console.error('Usage: node index.js <url> [--title] [--no-links]');
+    process.exit(1);
 }
 
-function read_url(url, res, inline_title, ignore_links) {
-		reader = readers.reader_for_url(url);
-		send_headers(res);
-		reader.read_url(url, res, inline_title, ignore_links);	
+// Ensure output directory exists
+if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
 }
 
-app.get('/', (req, res) => {
-	const url = req.query.url;
-	const title = req.query.title;
-	const links = req.query.links;
-	let inline_title = false;
-	let ignore_links = false;
-	if (title) {
-		inline_title = (title === 'true');
-	}
-	if (links) {
-		ignore_links = (links === 'false');
-	}
-	if (url && validURL(url)) {
-		read_url(url, res, inline_title, ignore_links);		
-	} else {
-		res.status(400).send("Please specify a valid url query parameter");
-	}
-});
+// Function to save markdown to a file
+function saveMarkdown(url, markdown) {
+    const fileName = path.join(outputDir, `${new URL(url).hostname}-${Date.now()}.md`);
+    fs.writeFileSync(fileName, markdown);
+    console.log(`Markdown saved to ${fileName}`);
+}
 
-app.post('/', function(req, res) {
-	const html = req.body.html;
-	const url = req.body.url;
-	const links = req.query.links;
-	const title = req.query.title;
-	let ignore_links = false;
-	let inline_title = false;
-	if (title) {
-		inline_title = (title === 'true');
-	}
-	if (links) {
-		ignore_links = (links === 'false');
-	}
-	if (readers.ignore_post(url)) {
-		read_url(url, res, inline_title, ignore_links);
-		return;
-	}
-	if (!html) {
-		res.status(400).send("Please provide a POST parameter called html");
-	} else {	  	
-		try {
-			let document = new JSDOM(html);
-			let markdown = processor.process_dom(url, document, res, inline_title, ignore_links);
-			send_headers(res);
-			res.send(markdown);
-		 } catch (error) {
-		 res.status(400).send("Could not parse that document");
-		}
-	}
+// Function to read URL and convert to markdown
+function readURLAndSaveMarkdown(url, inlineTitle, ignoreLinks) {
+    console.log(`Fetching URL: ${url}`);
+    console.log(`Options - Inline Title: ${inlineTitle}, Ignore Links: ${ignoreLinks}`);
+    
+    reader = readers.reader_for_url(url);
+    reader.read_url(url, null, inlineTitle, ignoreLinks, (markdown) => {
+        console.log('URL successfully fetched and converted to markdown');
+        saveMarkdown(url, markdown);
+    });
+}
 
-});
-
-app.listen(port, () => {	
-})
+// Read and process the URL
+readURLAndSaveMarkdown(url, inlineTitle, ignoreLinks);

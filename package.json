@@ -1,7 +1,7 @@
 {
   "name": "urltomarkdown",
   "version": "1.0.0",
-  "description": "",
+  "description": "A service that converts a webpage to markdown format.",
   "main": "index.js",
   "dependencies": {
     "@7c/validurl": "^0.0.3",
