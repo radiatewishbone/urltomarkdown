@@ -36,4 +36,4 @@ RUN npm test
 
 # Set the default command to run the application, replace URL with any test URL
 # This can be overridden when running the container
-CMD ["node", "index.js", "https://www.example.com"]
+CMD ["node", "index.js"]
