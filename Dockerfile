@@ -6,7 +6,7 @@ WORKDIR /usr/src/app
 
 # Copy the package.json and install production dependencies
 COPY package.json ./
-RUN npm install --production
+RUN npm install
 
 # Copy the necessary source code files
 COPY html_table_to_markdown.js ./

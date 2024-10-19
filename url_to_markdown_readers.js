@@ -65,19 +65,17 @@ class StackReader {
 }
 
 module.exports = {
-	HTMLReader,
-	AppleReader,
-	StackReader,
-	reader_for_url: function (url) {
-		if (url.startsWith(apple_dev_prefix)) {
-			return new AppleReader();
-		} else if (url.startsWith(stackoverflow_prefix)) {
-			return new StackReader();
-		} else {
-			return new HTMLReader();
-		}
-	},
-	ignore_post: function (url) {
-		return url && url.startsWith(stackoverflow_prefix);
-	}
-}
+    html_reader: HTMLReader,
+    stack_reader: StackReader,
+    apple_reader: AppleReader,
+    reader_for_url: function (url) {
+        if (url.startsWith("https://developer.apple.com")) {
+            return new AppleReader();
+        } else if (url.startsWith("https://stackoverflow.com")) {
+            return new StackReader();
+        } else {
+            return new HTMLReader();
+        }
+    }
+};
+
