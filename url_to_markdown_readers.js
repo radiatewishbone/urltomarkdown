@@ -95,16 +95,9 @@ class StackReader {
 }
 
 module.exports = {
-    html_reader: HTMLReader,
-    stack_reader: StackReader,
-    apple_reader: AppleReader,
-    reader_for_url: function (url) {
-        if (url.startsWith("https://developer.apple.com")) {
-            return new AppleReader();
-        } else if (url.startsWith("https://stackoverflow.com")) {
-            return new StackReader();
-        } else {
-            return new HTMLReader();
-        }
-    }
+    HTMLReader,     // Ensure this is the correct class
+    StackReader,    // Ensure this is the correct class
+    AppleReader,    // Ensure this is the correct class
+    reader_for_url
 };
+
